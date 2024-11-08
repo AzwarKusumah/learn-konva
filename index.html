@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Editor with KonvaJS</title>
+    <style>
+        /* Menggunakan flexbox untuk menempatkan container di tengah */
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            display: flex;
+            justify-content: center; /* Horizontal Centering */
+            align-items: center; /* Vertical Centering */
+            background-color: #f4f4f4;
+        }
+
+        #container {
+            border: 1px solid #ccc;
+            position: relative;
+        }
+
+        .button-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            margin-top: 10px;
+            text-align: center;
+        }
+        
+        select, input[type="color"], button {
+            margin: 5px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/konva@8.4.1/konva.min.js"></script>
+</head>
+<body>
+
+<div class="button-container">
+    <button onclick="addText()">Add Text</button>
+    <input type="file" id="imageUpload" />
+</div>
+
+<div class="controls">
+    <label for="fontSelect">Font:</label>
+    <select id="fontSelect" onchange="changeFont(event)">
+        <option value="Arial">Arial</option>
+        <option value="Courier New">Courier New</option>
+        <option value="Times New Roman">Times New Roman</option>
+        <option value="Verdana">Verdana</option>
+    </select>
+    
+    <label for="colorPicker">Color:</label>
+    <input type="color" id="colorPicker" onchange="changeColor(event)" />
+
+    <button onclick="deleteText()">Delete Selected Text</button>
+</div>
+
+<div id="container"></div>
+
+<script>
+    const stage = new Konva.Stage({
+        container: 'container',
+        width: 800, // Default size before image is loaded
+        height: 600, // Default size before image is loaded
+    });
+
+    const layer = new Konva.Layer();
+    stage.add(layer);
+
+    let selectedTextNode = null;
+    let selectedTransformer = null;  // Referensi ke transformer yang dipilih
+    let imageObj = new Image();
+    const imageUpload = document.getElementById('imageUpload');
+
+    // Fungsi untuk menambah gambar dan menyesuaikan ukuran stage
+    imageUpload.addEventListener('change', function (event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                imageObj.onload = function () {
+                    // Menyesuaikan ukuran stage berdasarkan gambar
+                    stage.width(imageObj.width);
+                    stage.height(imageObj.height);
+
+                    // Membuat image node di Konva
+                    const imageNode = new Konva.Image({
+                        x: 0,
+                        y: 0,
+                        image: imageObj,
+                        width: imageObj.width,
+                        height: imageObj.height,
+                    });
+
+                    layer.add(imageNode);
+                    layer.batchDraw();
+                };
+                imageObj.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    // Fungsi untuk menambah teks
+    function addText() {
+        const textNode = new Konva.Text({
+            text: 'Your Text Here',
+            x: 50,
+            y: 50,
+            fontSize: 24,
+            fontFamily: 'Arial',
+            draggable: true,
+            fill: '#000000', // Warna teks default
+        });
+        
+        layer.add(textNode);
+        layer.draw();
+
+        // Membuat teks dapat diedit dan di-resize
+        makeEditable(textNode);
+    }
+
+    // Fungsi untuk membuat teks dapat di-edit dan di-resize
+    function makeEditable(textNode) {
+        // Menghapus transformer sebelumnya jika ada
+        if (selectedTransformer) {
+            selectedTransformer.destroy();
+        }
+
+        // Membuat transformer baru untuk node yang baru
+        const tr = new Konva.Transformer({
+            nodes: [textNode],
+            enabledAnchors: ['middle-left', 'middle-right'],
+            boundBoxFunc: (oldBox, newBox) => {
+                newBox.width = Math.max(30, newBox.width);
+                return newBox;
+            },
+        });
+        
+        layer.add(tr);
+        layer.draw();
+
+        // Menyimpan transformer yang dipilih
+        selectedTransformer = tr;
+
+        // Event untuk memilih teks
+        textNode.on('click', () => {
+            selectedTextNode = textNode;
+        });
+
+        // Event untuk double-click untuk mengedit teks
+        textNode.on('dblclick', () => {
+            const textPosition = textNode.getAbsolutePosition();
+            const areaPosition = {
+                x: stage.container().offsetLeft + textPosition.x,
+                y: stage.container().offsetTop + textPosition.y,
+            };
+
+            const textarea = document.createElement('textarea');
+            document.body.appendChild(textarea);
+
+            textarea.value = textNode.text();
+            textarea.style.position = 'absolute';
+            textarea.style.top = `${areaPosition.y}px`;
+            textarea.style.left = `${areaPosition.x}px`;
+            textarea.style.width = `${textNode.width()}px`;
+            textarea.style.height = `${textNode.height()}px`;
+            textarea.style.fontSize = `${textNode.fontSize()}px`;
+            textarea.focus();
+
+            textarea.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    textNode.text(textarea.value);
+                    layer.draw();
+                    document.body.removeChild(textarea);
+                }
+            });
+
+            textarea.addEventListener('blur', function () {
+                textNode.text(textarea.value);
+                layer.draw();
+                document.body.removeChild(textarea);
+            });
+        });
+    }
+
+    // Fungsi untuk mengubah font
+    function changeFont(event) {
+        if (selectedTextNode) {
+            const font = event.target.value;
+            selectedTextNode.fontFamily(font);
+            layer.draw();
+        }
+    }
+
+    // Fungsi untuk mengubah warna teks
+    function changeColor(event) {
+        if (selectedTextNode) {
+            const color = event.target.value;
+            selectedTextNode.fill(color);
+            layer.draw();
+        }
+    }
+
+    // Fungsi untuk menghapus teks yang dipilih
+    function deleteText() {
+        if (selectedTextNode) {
+            selectedTextNode.destroy(); // Menghapus node teks yang dipilih
+            if (selectedTransformer) {
+                selectedTransformer.destroy(); // Menghapus transformer
+            }
+            selectedTextNode = null; // Reset teks yang dipilih
+            selectedTransformer = null; // Reset transformer yang dipilih
+            layer.draw(); // Redraw layer
+        }
+    }
+</script>
+
+</body>
+</html>
